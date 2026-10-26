@@ -1,0 +1,644 @@
+# ─── Page config ────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="Gestão de Obras",
+    page_icon="🏗️",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+ 
+# ─── Custom CSS ─────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@300;400;500&display=swap');
+ 
+html, body, [class*="css"] {
+    font-family: 'Barlow', sans-serif;
+}
+ 
+/* Background */
+.stApp {
+    background-color: #0d1117;
+    color: #e6edf3;
+}
+ 
+/* Sidebar */
+[data-testid="stSidebar"] {
+    background-color: #161b22;
+    border-right: 1px solid #21262d;
+}
+[data-testid="stSidebar"] * {
+    color: #c9d1d9 !important;
+}
+ 
+/* Headers */
+h1, h2, h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+ 
+/* Metric cards */
+.metric-card {
+    background: linear-gradient(135deg, #161b22 0%, #1c2128 100%);
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 20px 24px;
+    position: relative;
+    overflow: hidden;
+}
+.metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+}
+.metric-card.green::before  { background: linear-gradient(90deg, #238636, #2ea043); }
+.metric-card.red::before    { background: linear-gradient(90deg, #b91c1c, #ef4444); }
+.metric-card.yellow::before { background: linear-gradient(90deg, #b45309, #f59e0b); }
+.metric-card.blue::before   { background: linear-gradient(90deg, #1d4ed8, #3b82f6); }
+ 
+.metric-label {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #8b949e;
+    margin-bottom: 6px;
+}
+.metric-value {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 32px;
+    font-weight: 700;
+    color: #e6edf3;
+    line-height: 1;
+}
+.metric-sub {
+    font-size: 12px;
+    color: #8b949e;
+    margin-top: 6px;
+}
+ 
+/* Section titles */
+.section-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #8b949e;
+    border-bottom: 1px solid #21262d;
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+}
+ 
+/* Progress bar custom */
+.progress-wrapper {
+    background: #21262d;
+    border-radius: 4px;
+    height: 8px;
+    overflow: hidden;
+    margin-top: 8px;
+}
+.progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.6s ease;
+}
+ 
+/* Selectbox and inputs */
+[data-testid="stSelectbox"] > div > div {
+    background: #161b22 !important;
+    border: 1px solid #30363d !important;
+    color: #e6edf3 !important;
+}
+ 
+/* Plotly charts background override */
+.js-plotly-plot .plotly .bg {
+    fill: transparent !important;
+}
+ 
+/* Divider */
+hr {
+    border-color: #21262d;
+}
+ 
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {
+    background: #161b22;
+    border-radius: 8px;
+    padding: 4px;
+    gap: 4px;
+}
+.stTabs [data-baseweb="tab"] {
+    background: transparent;
+    color: #8b949e;
+    border-radius: 6px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.stTabs [aria-selected="true"] {
+    background: #21262d !important;
+    color: #e6edf3 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+ 
+# ─── Data generation ─────────────────────────────────────────────────────────
+@st.cache_data
+def generate_data():
+    random.seed(42)
+ 
+    meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+             "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+ 
+    # Realizado x Orçado (mensal)
+    orcado  = [280, 310, 340, 370, 390, 420, 450, 480, 460, 440, 410, 380]
+    realizado = [265, 298, 355, 362, 410, 405, 438, 491, 0, 0, 0, 0]  # últimos meses sem dado
+ 
+    df_financeiro = pd.DataFrame({
+        "Mês": meses,
+        "Orçado (R$k)": orcado,
+        "Realizado (R$k)": realizado,
+    })
+ 
+    # Evolução física (% conclusão por etapa)
+    etapas = [
+        "Fundação", "Estrutura", "Alvenaria",
+        "Cobertura", "Instalações", "Acabamento", "Paisagismo"
+    ]
+    previsto   = [100, 100, 90, 75, 60, 30, 10]
+    executado  = [100, 98,  82, 70, 48, 15, 0]
+ 
+    df_fisica = pd.DataFrame({
+        "Etapa": etapas,
+        "Previsto (%)": previsto,
+        "Executado (%)": executado,
+    })
+ 
+    # Custo por categoria
+    categorias = ["Mão de Obra", "Material", "Equipamentos", "Serviços Terceiros", "Encargos"]
+    orcado_cat   = [1_200_000, 2_100_000, 450_000, 380_000, 320_000]
+    realizado_cat = [1_150_000, 2_280_000, 410_000, 395_000, 305_000]
+ 
+    df_categoria = pd.DataFrame({
+        "Categoria": categorias,
+        "Orçado": orcado_cat,
+        "Realizado": realizado_cat,
+    })
+    df_categoria["Variação"] = df_categoria["Realizado"] - df_categoria["Orçado"]
+    df_categoria["Variação %"] = (df_categoria["Variação"] / df_categoria["Orçado"] * 100).round(1)
+ 
+    # Cronograma de atividades
+    today = date.today()
+    activities = [
+        ("Fundação",      today - timedelta(180), today - timedelta(120), 1.00),
+        ("Estrutura",     today - timedelta(130), today - timedelta(50),  0.98),
+        ("Alvenaria",     today - timedelta(80),  today + timedelta(20),  0.82),
+        ("Cobertura",     today - timedelta(40),  today + timedelta(60),  0.70),
+        ("Instalações",   today - timedelta(10),  today + timedelta(100), 0.48),
+        ("Acabamento",    today + timedelta(60),  today + timedelta(200), 0.15),
+        ("Paisagismo",    today + timedelta(190), today + timedelta(250), 0.00),
+    ]
+    df_gantt = pd.DataFrame(activities, columns=["Tarefa", "Início", "Fim", "Progresso"])
+ 
+    return df_financeiro, df_fisica, df_categoria, df_gantt
+ 
+ 
+df_financeiro, df_fisica, df_categoria, df_gantt = generate_data()
+ 
+# ─── Plotly theme ────────────────────────────────────────────────────────────
+CHART_THEME = {
+    "paper_bgcolor": "rgba(0,0,0,0)",
+    "plot_bgcolor":  "rgba(0,0,0,0)",
+    "font_color":    "#8b949e",
+    "gridcolor":     "#21262d",
+    "zerolinecolor": "#30363d",
+}
+ 
+# ─── Sidebar ─────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## 🏗️ GESTÃO DE OBRAS")
+    st.markdown("---")
+ 
+    obra = st.selectbox("Obra", [
+        "Residencial Ipê – Fase 2",
+        "Complexo Comercial Norte",
+        "Condomínio Serra Verde"
+    ])
+ 
+    st.markdown("---")
+    st.markdown("**Informações da Obra**")
+    st.markdown(f"""
+    - 📍 **Local:** São Paulo, SP  
+    - 📅 **Início:** 15/Jan/2024  
+    - 🏁 **Prazo:** 30/Dez/2024  
+    - 👷 **Responsável:** Eng. Carlos Mendes  
+    """)
+ 
+    st.markdown("---")
+    st.markdown("**Filtros**")
+    anos = st.multiselect("Ano", [2023, 2024], default=[2024])
+    categorias_sel = st.multiselect(
+        "Categorias de Custo",
+        ["Mão de Obra", "Material", "Equipamentos", "Serviços Terceiros", "Encargos"],
+        default=["Mão de Obra", "Material", "Equipamentos", "Serviços Terceiros", "Encargos"]
+    )
+ 
+    st.markdown("---")
+    st.caption("Dashboard v1.0 • Dados simulados")
+ 
+# ─── Header ──────────────────────────────────────────────────────────────────
+col_t1, col_t2 = st.columns([3, 1])
+with col_t1:
+    st.markdown(f"# 🏗️ {obra}")
+    st.markdown("**PAINEL DE CONTROLE GERENCIAL**")
+with col_t2:
+    st.markdown(f"<br><small style='color:#8b949e'>Atualizado em {date.today().strftime('%d/%m/%Y')}</small>", unsafe_allow_html=True)
+ 
+st.markdown("---")
+ 
+# ─── KPIs ────────────────────────────────────────────────────────────────────
+kpis = st.columns(4)
+ 
+total_orcado    = sum(df_categoria["Orçado"])
+total_realizado = sum(df_categoria["Realizado"])
+variacao_total  = total_realizado - total_orcado
+avanco_fisico   = 59  # % médio ponderado
+ 
+cards = [
+    ("ORÇAMENTO TOTAL",      f"R$ {total_orcado/1e6:.2f}M",      "Valor contratado",                   "blue"),
+    ("CUSTO REALIZADO",      f"R$ {total_realizado/1e6:.2f}M",   f"{total_realizado/total_orcado*100:.1f}% do orçado", "yellow"),
+    ("VARIAÇÃO",             f"R$ {abs(variacao_total/1e3):.0f}k", f"{'↑ Acima' if variacao_total>0 else '↓ Abaixo'} do orçado", "red" if variacao_total > 0 else "green"),
+    ("AVANÇO FÍSICO",        f"{avanco_fisico}%",                "Meta: 64% no período",               "green"),
+]
+ 
+for col, (label, value, sub, color) in zip(kpis, cards):
+    with col:
+        st.markdown(f"""
+        <div class="metric-card {color}">
+            <div class="metric-label">{label}</div>
+            <div class="metric-value">{value}</div>
+            <div class="metric-sub">{sub}</div>
+        </div>
+        """, unsafe_allow_html=True)
+ 
+st.markdown("<br>", unsafe_allow_html=True)
+ 
+# ─── Tabs ────────────────────────────────────────────────────────────────────
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📊  Realizado vs Orçado",
+    "🏛️  Evolução Física",
+    "💰  Custo por Categoria",
+    "📅  Cronograma",
+])
+ 
+# ── Tab 1: Realizado x Orçado ────────────────────────────────────────────────
+with tab1:
+    st.markdown('<p class="section-title">Desempenho Financeiro Mensal</p>', unsafe_allow_html=True)
+ 
+    col_a, col_b = st.columns([2, 1])
+ 
+    with col_a:
+        fig = go.Figure()
+ 
+        fig.add_trace(go.Bar(
+            name="Orçado",
+            x=df_financeiro["Mês"],
+            y=df_financeiro["Orçado (R$k)"],
+            marker_color="#1d4ed8",
+            marker_opacity=0.7,
+        ))
+        fig.add_trace(go.Bar(
+            name="Realizado",
+            x=df_financeiro["Mês"],
+            y=df_financeiro["Realizado (R$k)"],
+            marker_color="#f59e0b",
+        ))
+        # Linha de tendência orçado
+        fig.add_trace(go.Scatter(
+            name="Orçado (linha)",
+            x=df_financeiro["Mês"],
+            y=df_financeiro["Orçado (R$k)"],
+            mode="lines",
+            line=dict(color="#3b82f6", dash="dot", width=1.5),
+            showlegend=False,
+        ))
+ 
+        fig.update_layout(
+            barmode="group",
+            paper_bgcolor=CHART_THEME["paper_bgcolor"],
+            plot_bgcolor=CHART_THEME["plot_bgcolor"],
+            font=dict(color=CHART_THEME["font_color"], family="Barlow"),
+            xaxis=dict(gridcolor=CHART_THEME["gridcolor"], zerolinecolor=CHART_THEME["zerolinecolor"]),
+            yaxis=dict(gridcolor=CHART_THEME["gridcolor"], zerolinecolor=CHART_THEME["zerolinecolor"],
+                       tickprefix="R$", ticksuffix="k"),
+            legend=dict(orientation="h", y=1.08, bgcolor="rgba(0,0,0,0)"),
+            height=360,
+            margin=dict(l=10, r=10, t=30, b=10),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+ 
+    with col_b:
+        st.markdown('<p class="section-title">Acumulado</p>', unsafe_allow_html=True)
+ 
+        orcado_acc   = df_financeiro["Orçado (R$k)"].sum()
+        realizado_acc = df_financeiro[df_financeiro["Realizado (R$k)"] > 0]["Realizado (R$k)"].sum()
+        pct = realizado_acc / orcado_acc * 100
+ 
+        fig2 = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=pct,
+            number={"suffix": "%", "font": {"size": 40, "family": "Barlow Condensed", "color": "#e6edf3"}},
+            gauge={
+                "axis": {"range": [0, 100], "tickcolor": "#8b949e"},
+                "bar": {"color": "#f59e0b"},
+                "bgcolor": "#21262d",
+                "bordercolor": "#30363d",
+                "steps": [
+                    {"range": [0, 50],  "color": "#161b22"},
+                    {"range": [50, 80], "color": "#1c2128"},
+                    {"range": [80, 100],"color": "#1c2128"},
+                ],
+                "threshold": {
+                    "line": {"color": "#3b82f6", "width": 3},
+                    "thickness": 0.8,
+                    "value": 100,
+                },
+            },
+            title={"text": "Realizado vs Orçado", "font": {"color": "#8b949e", "size": 13}},
+        ))
+        fig2.update_layout(
+            paper_bgcolor=CHART_THEME["paper_bgcolor"],
+            height=300,
+            margin=dict(l=20, r=20, t=30, b=0),
+        )
+        st.plotly_chart(fig2, use_container_width=True)
+ 
+        desvio = realizado_acc - orcado_acc
+        cor = "🔴" if desvio > 0 else "🟢"
+        st.markdown(f"""
+        | Item | Valor |
+        |------|-------|
+        | Orçado Acum. | R$ {orcado_acc:.0f}k |
+        | Realizado Acum. | R$ {realizado_acc:.0f}k |
+        | Desvio | {cor} R$ {abs(desvio):.0f}k |
+        """)
+ 
+# ── Tab 2: Evolução Física ────────────────────────────────────────────────────
+with tab2:
+    st.markdown('<p class="section-title">Avanço Físico por Etapa</p>', unsafe_allow_html=True)
+ 
+    col_c, col_d = st.columns([3, 2])
+ 
+    with col_c:
+        fig3 = go.Figure()
+ 
+        fig3.add_trace(go.Bar(
+            name="Previsto",
+            y=df_fisica["Etapa"],
+            x=df_fisica["Previsto (%)"],
+            orientation="h",
+            marker_color="#1d4ed8",
+            marker_opacity=0.5,
+        ))
+        fig3.add_trace(go.Bar(
+            name="Executado",
+            y=df_fisica["Etapa"],
+            x=df_fisica["Executado (%)"],
+            orientation="h",
+            marker_color="#2ea043",
+        ))
+ 
+        fig3.update_layout(
+            barmode="overlay",
+            paper_bgcolor=CHART_THEME["paper_bgcolor"],
+            plot_bgcolor=CHART_THEME["plot_bgcolor"],
+            font=dict(color=CHART_THEME["font_color"], family="Barlow"),
+            xaxis=dict(
+                gridcolor=CHART_THEME["gridcolor"],
+                ticksuffix="%", range=[0, 110],
+            ),
+            yaxis=dict(gridcolor=CHART_THEME["gridcolor"]),
+            legend=dict(orientation="h", y=1.08, bgcolor="rgba(0,0,0,0)"),
+            height=380,
+            margin=dict(l=10, r=30, t=30, b=10),
+        )
+        st.plotly_chart(fig3, use_container_width=True)
+ 
+    with col_d:
+        st.markdown('<p class="section-title">Status das Etapas</p>', unsafe_allow_html=True)
+ 
+        for _, row in df_fisica.iterrows():
+            exec_p = row["Executado (%)"]
+            prev_p = row["Previsto (%)"]
+            diff   = exec_p - prev_p
+ 
+            if exec_p == 0:
+                status_icon, status_color = "⏳", "#8b949e"
+            elif exec_p >= prev_p:
+                status_icon, status_color = "✅", "#2ea043"
+            elif diff >= -10:
+                status_icon, status_color = "⚠️", "#f59e0b"
+            else:
+                status_icon, status_color = "🔴", "#ef4444"
+ 
+            bar_color = "#2ea043" if exec_p >= prev_p else "#f59e0b" if diff >= -10 else "#ef4444"
+ 
+            st.markdown(f"""
+            <div style="margin-bottom:14px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:13px;color:#c9d1d9;">{status_icon} {row['Etapa']}</span>
+                    <span style="font-size:13px;font-weight:600;color:{status_color};">{exec_p}%</span>
+                </div>
+                <div class="progress-wrapper">
+                    <div class="progress-fill" style="width:{exec_p}%;background:{bar_color};"></div>
+                </div>
+                <div style="font-size:11px;color:#8b949e;margin-top:3px;">Previsto: {prev_p}% &nbsp;|&nbsp; Desvio: {diff:+.0f}%</div>
+            </div>
+            """, unsafe_allow_html=True)
+ 
+    # Índice de desempenho
+    st.markdown("---")
+    idp = sum(df_fisica["Executado (%)"]) / sum(df_fisica["Previsto (%)"])
+    col_i1, col_i2, col_i3 = st.columns(3)
+    with col_i1:
+        st.metric("Índice de Desempenho Físico (IDF)", f"{idp:.3f}", f"{'Adiantado' if idp > 1 else 'Atrasado'}")
+    with col_i2:
+        media_exec = sum(df_fisica["Executado (%)"]) / len(df_fisica)
+        st.metric("Progresso Médio Executado", f"{media_exec:.1f}%")
+    with col_i3:
+        etapas_concluidas = sum(1 for v in df_fisica["Executado (%)"] if v == 100)
+        st.metric("Etapas Concluídas", f"{etapas_concluidas}/{len(df_fisica)}")
+ 
+# ── Tab 3: Custo por Categoria ────────────────────────────────────────────────
+with tab3:
+    st.markdown('<p class="section-title">Distribuição de Custos</p>', unsafe_allow_html=True)
+ 
+    df_cat_filtrado = df_categoria[df_categoria["Categoria"].isin(categorias_sel)]
+ 
+    col_e, col_f = st.columns([1, 1])
+ 
+    with col_e:
+        # Donut realizado
+        fig4 = go.Figure(go.Pie(
+            labels=df_cat_filtrado["Categoria"],
+            values=df_cat_filtrado["Realizado"],
+            hole=0.55,
+            marker=dict(
+                colors=["#1d4ed8", "#f59e0b", "#2ea043", "#9333ea", "#ef4444"],
+                line=dict(color="#0d1117", width=2),
+            ),
+            textfont=dict(family="Barlow", color="#e6edf3"),
+        ))
+        fig4.update_layout(
+            paper_bgcolor=CHART_THEME["paper_bgcolor"],
+            font=dict(color=CHART_THEME["font_color"]),
+            legend=dict(orientation="v", bgcolor="rgba(0,0,0,0)"),
+            height=340,
+            margin=dict(l=10, r=10, t=10, b=10),
+            annotations=[dict(
+                text=f"R$ {df_cat_filtrado['Realizado'].sum()/1e6:.1f}M",
+                x=0.5, y=0.5, showarrow=False,
+                font=dict(size=18, family="Barlow Condensed", color="#e6edf3"),
+            )],
+            title=dict(text="Realizado por Categoria", font=dict(color="#8b949e", size=13)),
+        )
+        st.plotly_chart(fig4, use_container_width=True)
+ 
+    with col_f:
+        # Waterfall variações
+        fig5 = go.Figure(go.Waterfall(
+            name="Variação",
+            orientation="v",
+            x=df_cat_filtrado["Categoria"],
+            y=df_cat_filtrado["Variação"],
+            connector={"line": {"color": "#30363d"}},
+            increasing={"marker": {"color": "#ef4444"}},
+            decreasing={"marker": {"color": "#2ea043"}},
+            text=[f"R$ {v/1e3:+.0f}k" for v in df_cat_filtrado["Variação"]],
+            textposition="outside",
+            textfont=dict(size=10, color="#c9d1d9"),
+        ))
+        fig5.update_layout(
+            paper_bgcolor=CHART_THEME["paper_bgcolor"],
+            plot_bgcolor=CHART_THEME["plot_bgcolor"],
+            font=dict(color=CHART_THEME["font_color"], family="Barlow"),
+            xaxis=dict(gridcolor=CHART_THEME["gridcolor"]),
+            yaxis=dict(
+                gridcolor=CHART_THEME["gridcolor"],
+                tickprefix="R$", ticksuffix="",
+            ),
+            title=dict(text="Variação (Realizado − Orçado)", font=dict(color="#8b949e", size=13)),
+            showlegend=False,
+            height=340,
+            margin=dict(l=10, r=10, t=40, b=10),
+        )
+        st.plotly_chart(fig5, use_container_width=True)
+ 
+    # Tabela detalhada
+    st.markdown('<p class="section-title">Detalhamento por Categoria</p>', unsafe_allow_html=True)
+ 
+    df_display = df_cat_filtrado.copy()
+    df_display["Orçado"]    = df_display["Orçado"].apply(lambda x: f"R$ {x:,.0f}")
+    df_display["Realizado"] = df_display["Realizado"].apply(lambda x: f"R$ {x:,.0f}")
+    df_display["Variação"]  = df_display["Variação"].apply(lambda x: f"{'🔴' if x>0 else '🟢'} R$ {abs(x):,.0f}")
+    df_display["Variação %"] = df_display["Variação %"].apply(lambda x: f"{x:+.1f}%")
+ 
+    st.dataframe(
+        df_display[["Categoria", "Orçado", "Realizado", "Variação", "Variação %"]],
+        use_container_width=True,
+        hide_index=True,
+    )
+ 
+# ── Tab 4: Cronograma ─────────────────────────────────────────────────────────
+with tab4:
+    st.markdown('<p class="section-title">Cronograma Físico (Gantt)</p>', unsafe_allow_html=True)
+ 
+    today = date.today()
+ 
+    # Cores por progresso
+    def color_bar(p):
+        if p == 1.0:    return "#2ea043"
+        if p >= 0.5:    return "#f59e0b"
+        if p > 0:       return "#3b82f6"
+        return "#374151"
+ 
+    fig6 = go.Figure()
+ 
+    for i, row in df_gantt.iterrows():
+        duration = (row["Fim"] - row["Início"]).days
+        done_days = int(duration * row["Progresso"])
+ 
+        fig6.add_trace(go.Bar(
+            name=row["Tarefa"],
+            x=[duration],
+            y=[row["Tarefa"]],
+            base=[(row["Início"] - date(2024, 1, 1)).days],
+            orientation="h",
+            marker_color="#21262d",
+            showlegend=False,
+            hoverinfo="skip",
+        ))
+        fig6.add_trace(go.Bar(
+            name=f"{row['Tarefa']} ({int(row['Progresso']*100)}%)",
+            x=[done_days],
+            y=[row["Tarefa"]],
+            base=[(row["Início"] - date(2024, 1, 1)).days],
+            orientation="h",
+            marker_color=color_bar(row["Progresso"]),
+            showlegend=False,
+            text=f"{int(row['Progresso']*100)}%",
+            textposition="inside",
+            textfont=dict(size=11, color="#e6edf3"),
+        ))
+ 
+    # Linha de hoje
+    today_offset = (today - date(2024, 1, 1)).days
+    fig6.add_vline(
+        x=today_offset,
+        line_dash="dash",
+        line_color="#ef4444",
+        annotation_text="HOJE",
+        annotation_font=dict(color="#ef4444", size=11),
+    )
+ 
+    # Eixo X: converter offsets de volta para datas amigáveis
+    tick_dates = [date(2024, m, 1) for m in range(1, 13)]
+    tick_vals  = [(d - date(2024, 1, 1)).days for d in tick_dates]
+    tick_texts = [d.strftime("%b") for d in tick_dates]
+ 
+    fig6.update_layout(
+        barmode="overlay",
+        paper_bgcolor=CHART_THEME["paper_bgcolor"],
+        plot_bgcolor=CHART_THEME["plot_bgcolor"],
+        font=dict(color=CHART_THEME["font_color"], family="Barlow"),
+        xaxis=dict(
+            tickvals=tick_vals, ticktext=tick_texts,
+            gridcolor=CHART_THEME["gridcolor"],
+        ),
+        yaxis=dict(autorange="reversed", gridcolor=CHART_THEME["gridcolor"]),
+        height=380,
+        margin=dict(l=10, r=10, t=20, b=10),
+    )
+    st.plotly_chart(fig6, use_container_width=True)
+ 
+    # Legenda de status
+    st.markdown("""
+    <div style="display:flex;gap:24px;font-size:12px;color:#8b949e;">
+        <span>🟩 Concluído (100%)</span>
+        <span>🟨 Em andamento (&gt;50%)</span>
+        <span>🟦 Iniciado (&lt;50%)</span>
+        <span>⬜ Não iniciado</span>
+        <span>🔴 Linha: Hoje</span>
+    </div>
+    """, unsafe_allow_html=True)
+ 
+# ─── Footer ───────────────────────────────────────────────────────────────────
+st.markdown("---")
+st.markdown(
+    "<p style='text-align:center;font-size:11px;color:#484f58;letter-spacing:0.1em;'>"
+    "DASHBOARD DE GESTÃO DE OBRAS • DADOS DEMONSTRATIVOS • 2024"
+    "</p>",
+    unsafe_allow_html=True
+)
